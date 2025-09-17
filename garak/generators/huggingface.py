@@ -568,8 +568,15 @@ class LLaVA(Generator, HFCompatible):
         self.model = LlavaNextForConditionalGeneration.from_pretrained(
             self.name, **model_kwargs
         )
-
-        self.model.to(self.device)
+        # If accelerate device_map/offloading is used, avoid moving the model manually
+        self._using_device_map = model_kwargs.get("device_map", None) is not None
+        if not self._using_device_map:
+            self.model.to(self.device)
+        else:
+            logging.warning(
+                "You shouldn't move a model that is dispatched using accelerate hooks. Skipping model.to(%s)",
+                self.device,
+            )
 
     def generate(
         self, prompt: Conversation, generations_this_call: int = 1
@@ -584,9 +591,10 @@ class LLaVA(Generator, HFCompatible):
         except Exception as e:
             raise Exception(e)
 
-        inputs = self.processor(text_prompt, image_prompt, return_tensors="pt").to(
-            self.device
-        )
+        inputs = self.processor(text_prompt, image_prompt, return_tensors="pt")
+        # With accelerate device_map, inputs can remain on CPU and will be moved as needed
+        if not getattr(self, "_using_device_map", False):
+            inputs = inputs.to(self.device)
         exist_token_number: int = inputs.data["input_ids"].shape[1]
         output = self.model.generate(
             **inputs, max_new_tokens=self.max_tokens - exist_token_number
