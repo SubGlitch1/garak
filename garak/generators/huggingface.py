@@ -583,15 +583,19 @@ class LLaVA(Generator, HFCompatible):
     ) -> List[Union[Message, None]]:
 
         text_prompt = prompt.last_message().text
+        image_path = getattr(prompt.last_message(), "data_path", None)
         try:
-            image_prompt = Image.open(prompt.last_message().data_path)
+            if not image_path:
+                raise GarakException(
+                    "LLaVA requires an image. Use an image+text probe (e.g., visual_jailbreak.FigStep) or provide Message.data_path."
+                )
+            image_prompt = Image.open(image_path)
         except FileNotFoundError:
-            file_path = prompt.last_message().data_path
-            raise FileNotFoundError(f"Cannot open image {file_path}.")
+            raise FileNotFoundError(f"Cannot open image {image_path}.")
         except Exception as e:
-            raise Exception(e)
+            raise GarakException(f"Failed to open image at {image_path}: {e}")
 
-        inputs = self.processor(text_prompt, image_prompt, return_tensors="pt")
+        inputs = self.processor(images=image_prompt, text=text_prompt, return_tensors="pt")
         # With accelerate device_map, inputs can remain on CPU and will be moved as needed
         if not getattr(self, "_using_device_map", False):
             inputs = inputs.to(self.device)
