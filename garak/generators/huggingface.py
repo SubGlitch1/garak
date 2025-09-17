@@ -523,7 +523,7 @@ class LLaVA(Generator, HFCompatible):
     support text-only prompts."""
 
     DEFAULT_PARAMS = Generator.DEFAULT_PARAMS | {
-        "max_tokens": 4000,
+        "max_tokens": 512,
         # "exist_tokens + max_new_tokens < 4K is the golden rule."
         # https://github.com/haotian-liu/LLaVA/issues/1095#:~:text=Conceptually%2C%20as%20long%20as%20the%20total%20tokens%20are%20within%204K%2C%20it%20would%20be%20fine%2C%20so%20exist_tokens%20%2B%20max_new_tokens%20%3C%204K%20is%20the%20golden%20rule.
         "hf_args": {
@@ -600,8 +600,9 @@ class LLaVA(Generator, HFCompatible):
         if not getattr(self, "_using_device_map", False):
             inputs = inputs.to(self.device)
         exist_token_number: int = inputs.data["input_ids"].shape[1]
+        max_new = max(1, self.max_tokens - exist_token_number)
         output = self.model.generate(
-            **inputs, max_new_tokens=self.max_tokens - exist_token_number
+            **inputs, max_new_tokens=max_new
         )
         output = self.processor.decode(output[0], skip_special_tokens=True)
 
